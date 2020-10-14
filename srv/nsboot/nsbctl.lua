@@ -18,7 +18,7 @@
 	  	nsboot.inc = {}
 	  	nsboot.web = {}
 	  	nsboot.bin = {}
-	  	nsboot.cfg = dofile("/home/kevin/srv/nsboot/modules/cfg.lua").cfg
+	  	nsboot.cfg = dofile("/srv/nsboot/cfg/cfg.lua").cfg
 	--[[===========================================================================================================================================================================================]]
 	--[[ TARGET COMMANDS sets opt1,opt2,opt3  ]]
 	--[[===========================================================================================================================================================================================]]
@@ -60,12 +60,24 @@
 							new 	= function(p_path,p_size) 
 									return os.execute("/usr/bin/qemu-img -f qcow2 -o preallocation=metadata,compat=1.1,lazy_refcounts=on encryption=off "..p_path.." "..p_size);				end,
 							child 	= function(p_parrent,p_child) 
-									return os.execute("/usr/bin/qemu-img create -f qcow2 -b "..p_parrent.." "..p_child.." -o lazy_refcounts=on ");					end,
+									return os.execute("/usr/bin/qemu-img create -f qcow2 -b "..p_parrent.." "..p_child.." -o lazy_refcounts=on 2>>/tmp/result ");								end,
 							del 	= function(p_image) return os.remove(p_image); 																												end,
 							used 	= function(p_image) local fd; fd = io.popen("/usr/bin/qemu-img commit "..p_image); 																			end,
 							commit 	= function(p_image) local fd; fd = io.popen("/usr/bin/lsof -t "..p_image.." 2>/dev/null"); return (#fd:read("a*") > 0); 									end
-					};
+							};
 
+		nsboot.cmd.zfs =  	{
+							mtab 	= function(p_args) local fd_file, fd_data
+																fd_file = io.open("/etc/mtab", "r");  
+																fd_data = fd_file:read("*a");
+															 fd_file:close(); 
+															if string.find(fd_data,p_args) ~= nil then return true else return false; end;														end,
+							snap 	= function(p_data) 			 return os.execute("/usr/sbin/zfs snap "..p_data.." 2>/dev/null"); 																end,
+							unsnap 	= function(p_data) 			 return os.execute("/usr/sbin/zfs destroy -f "..p_data.." 2>/dev/null");														end,
+							mount 	= function(p_data,p_point)	 return os.execute("/usr/bin/mount -t zfs "..p_data.." "..p_point.." 2>>/var/log/messages"); 									end,
+							unmount  = function(p_point)			 return os.execute("/usr/bin/umount -f "..p_point.." 2>/dev/null");															end
+							}
+					
 
 
 	--[[===========================================================================================================================================================================================]]
@@ -114,6 +126,7 @@
 							return (#fd:read("a*") > 0 )
 		end;
 		nsboot.inc.lsofkill = function(p_path)
+							if p_path == nil then return error; end;
 							if tostring(nsboot.cfg.server.debug) == "1" then print("/usr/bin/kill -9 $(/usr/bin/lsof -t "..p_path.." ) ") end
 							return os.execute("/usr/bin/kill -9 $( /usr/bin/lsof -t "..p_path.." ) 2>/dev/null");
 							 
@@ -168,12 +181,10 @@
 	    return is
 	end;
 	function nsboot.inc.isFile(name)
-	    if type(name)~="string" then return false end
-	    if not nsboot.inc.isDir(name) then
-	        return os.rename(name,name) and true or false
+	        if name ~= nil and nsboot.lib.posix.stat(name) ~= nil then return true else return false end;
 	        -- note that the short evaluation is to
 	        -- return false instead of a possible nil
-	    end
+
 	    return false
 	end;
 
@@ -299,29 +310,72 @@
 		end;
 	--[[===========================================================================================================================================================================================]]
 		function nsboot:mkChild(p_ip)
-			local l_id,i,v,img_bpath,img_ppath = nsboot.inc.GetIDFromIPv4(p_ip);
-			if nsboot.cfg.wks[l_id].img ~= nil then
-				for i,v in pairs(nsboot.cfg.wks[l_id].img) do	
-					if nsboot.inc.checkconf() and v.path ~= nil and v.type == "dyndisk" and tostring(v.enable) == "1" then
-						img_bpath,img_ppath = nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..nsboot.cfg.wks[l_id].mac:gsub('%W',''), nsboot.cfg.server.imgdir.."/"..v.path;
-					elseif nsboot.inc.checkconf() and v.path ~= nil and v.type == "dyndata" and tostring(v.enable) == "1" then
-						img_bpath,img_ppath = nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..nsboot.cfg.wks[l_id].mac:gsub('%W',''), nsboot.cfg.server.imgdatadir.."/"..v.path;
-					end;
-					if img_ppath  then
-						if nsboot.inc.isFile(img_bpath) then
-							while nsboot.cmd.img.used(img_bpath) do
-								nsboot.inc.lsofkill(img_bpath)
-								require("posix.unistd").sleep(1);
+			local l_id,l_lockf,p_child,p_parrent = nsboot.inc.GetIDFromIPv4(p_ip) 
+			local l_vid = nsboot.cfg.wks[l_id].mac:gsub('%W','')
+			if tostring(nsboot.cfg.wks[l_id].enable) == "1" then
+				
+				for i,v in pairs(nsboot.cfg.wks[l_id].img) do
+						l_lockf = nsboot.cfg.server.lockfile..i..l_vid;
+						
+						--[[ PROCESS FIND PATH PARRENTS ]]--
+
+					if tostring(nsboot.cfg.wks[l_id].enable) == "1" and tostring(v.enable) == "1" and v.type == "dyndisk" then
+						if  tostring(nsboot.cfg.wks[l_id].enable) == "1" and  tostring(nsboot.cfg.wks[l_id].supper) == "1" and tostring(v.enable) == "1" and tostring(v.commit) == "1" then p_parrent = nsboot.cfg.server.imgdir.."/"..v.path; p_child = nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..l_vid; 	end;
+						if  tostring(nsboot.cfg.wks[l_id].supper) == "0" and tostring(v.enable) == "1" and tostring(v.commit) == "0" then p_parrent = nsboot.cfg.server.imgdir.."/"..nsboot.cfg.zfs.tmpname.."/"..l_vid.."/"..v.path; p_child = nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..l_vid	end; --
+						if  tostring(nsboot.cfg.wks[l_id].supper) == "0" and tostring(v.enable) == "1" and tostring(v.commit) == "1" then p_parrent = nsboot.cfg.server.imgdir.."/"..nsboot.cfg.zfs.tmpname.."/"..l_vid.."/"..v.path; p_child = nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..l_vid	end;
+						if  tostring(nsboot.cfg.wks[l_id].supper) == "1" and tostring(v.enable) == "1" and tostring(v.commit) == "0" then p_parrent = nsboot.cfg.server.imgdir.."/"..nsboot.cfg.zfs.tmpname.."/"..l_vid.."/"..v.path; p_child = nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..l_vid	end;
+					elseif 	tostring(nsboot.cfg.wks[l_id].enable) == "1" and tostring(v.enable) == "1" and v.type == "dynblock" then
+						if  tostring(nsboot.cfg.wks[l_id].enable) == "1" and  tostring(nsboot.cfg.wks[l_id].supper) == "1" and tostring(v.enable) == "1" and tostring(v.commit) == "1" then p_parrent = nsboot.cfg.zfs.devpoint.."/"..v.path; p_child = nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..l_vid; 	end;
+						if  tostring(nsboot.cfg.wks[l_id].supper) == "0" and tostring(v.enable) == "1" and tostring(v.commit) == "0" then p_parrent = nsboot.cfg.zfs.devpoint.."/"..v.path.."@"..nsboot.cfg.zfs.tmpname.."_"..l_vid; p_child = nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..l_vid	end; --
+						if  tostring(nsboot.cfg.wks[l_id].supper) == "0" and tostring(v.enable) == "1" and tostring(v.commit) == "1" then p_parrent = nsboot.cfg.zfs.devpoint.."/"..v.path.."@"..nsboot.cfg.zfs.tmpname.."_"..l_vid; p_child = nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..l_vid	end;
+						if  tostring(nsboot.cfg.wks[l_id].supper) == "1" and tostring(v.enable) == "1" and tostring(v.commit) == "0" then p_parrent = nsboot.cfg.zfs.devpoint.."/"..v.path.."@"..nsboot.cfg.zfs.tmpname.."_"..l_vid; p_child = nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..l_vid	end;
+					end;	
+
+
+						--[[ PROCESS CREATE CHILD FILE ]]--
+
+						if  tostring(nsboot.cfg.wks[l_id].enable) == "1" and  tostring(nsboot.cfg.wks[l_id].supper) == "1" and tostring(v.enable) == "1" and tostring(v.commit) == "1" and not nsboot.inc.isFile(l_lockf) and nsboot.inc.isFile(p_child) then 
+								while nsboot.cmd.img.used(p_child) do
+									nsboot.inc.lsofkill(p_child)
+									require("posix.unistd").sleep(1);
+								end;
+								nsboot.cmd.img.del(p_child);
+								nsboot.cmd.img.child(p_parrent, p_child);
+								local tmpfile = io.open(l_lockf, "w");
+								tmpfile:write("USED: "..v.path.." date: "..os.date());
+								tmpfile:close()
+								tmpfile = nil
+						elseif tostring(nsboot.cfg.wks[l_id].enable) == "1" and  tostring(nsboot.cfg.wks[l_id].supper) == "1" and tostring(v.enable) == "1" and tostring(v.commit) == "1" and not nsboot.inc.isFile(l_lockf) and not nsboot.inc.isFile(p_child) then
+							local tmpfile = io.open(l_lockf, "w")
+							tmpfile:write("USED: "..v.path.." date: "..os.date());
+							tmpfile:close();
+							tmpfile = nil
+							nsboot.cmd.img.child(p_parrent, p_child);
+						elseif tostring(nsboot.cfg.wks[l_id].enable) == "1" and  tostring(nsboot.cfg.wks[l_id].supper) == "1" and tostring(v.enable) == "1" and tostring(v.commit) == "1" and nsboot.inc.isFile(l_lockf) and nsboot.inc.isFile(p_child) then
+							local tmpfile = io.open(l_lockf, "w");
+							tmpfile:write("USED: "..v.path.." date: "..os.date());
+							tmpfile:close();
+							tmpfile = nil
+						else
+							if nsboot.inc.isFile(p_child) then
+								while nsboot.cmd.img.used(p_child) do
+									nsboot.inc.lsofkill(p_child)
+									require("posix.unistd").sleep(1);
+								end;
+								nsboot.cmd.img.del(p_child);
+								if nsboot.inc.isFile(l_lockf) then os.remove(l_lockf) end
+							end;						
+							if p_parrent ~= nil and p_child ~= nil  then
+								while not nsboot.inc.isFile(p_parrent) do
+												require("posix.unistd").sleep(0.5);
+								end;
+									nsboot.cmd.img.child(p_parrent, p_child);
+									ngx.say(p_parrent," ", p_child)
 							end;
-							nsboot.cmd.img.del(img_bpath);
-							end;
-							if not nsboot.inc.isFile(img_bpath) and nsboot.inc.isFile(img_ppath) then
-								nsboot.cmd.img.child(img_ppath,img_bpath)
-							else
-								return "ERROR CREATE CHILD"
-							end;
-					end;
-					img_ppath = nil;
+						end;
+						ngx.say(p_parrent," ",i," ", p_child)
+						ngx.say("\n\nnext 1\n\n")
+						p_child,p_parrent,l_lockf = nil,nil,nil
 				end;
 			end;			
 			l_id,i,v = nil,nil,nil;
@@ -355,6 +409,8 @@
 				fd = io.popen("/usr/sbin/tgtadm --lld iscsi --op show --mode target | /usr/bin/grep 'IP Address: "..p_ip.."'"); --/usr/sbin/tgtadm --lld iscsi --op show --mode target | grep --color "IP Address: 192.168.0.4"
 				return (#fd:read("a*") > 0);
 		end;
+	
+
 	--[[===========================================================================================================================================================================================]]
 		function nsboot:nbdFree(p_ip)
 				local l_id,i,v = nsboot.inc.GetIDFromIPv4(p_ip);
@@ -395,17 +451,17 @@
 							end;
 							require("posix.unistd").sleep(1);
 					end;
-					while nsboot.cmd.nbd.used(v.nbd) do
+					-- while nsboot.cmd.nbd.used(v.nbd) do
 						require("posix.unistd").sleep(1);
-					end
-					if not nsboot.cmd.nbd.used(v.nbd) then
+					-- end
+					-- if not nsboot.cmd.nbd.used(v.nbd) then
 						if tostring(nsboot.cfg.server.debug) == "1" then io.write("unblocked: "); print(v.nbd); end;
 						if v.path ~= nil and tostring(v.enable) == "1" then
-							if tostring(v.enable) == "1"  and v.type == "dyndisk" or v.type == "dyndata" then
+							if tostring(v.enable) == "1"  and v.type == "dyndisk" or v.type == "dynblock" then
 								nsboot.cmd.nbd.add(v.nbd,nsboot.cfg.server.imgbackdir.."/"..v.path..nsboot.cfg.server.image_prefix..nsboot.cfg.wks[l_id].mac:gsub('%W','')," --discard=unmap --cache="..v.cache)			
 							end;
 						end;
-					end;					
+					-- end;					
 				end;
 			end;
 			l_id,i,v = nil,nil,nil;
@@ -426,7 +482,7 @@
 									if tostring(nsboot.cfg.server.debug) == "1" then ngx.say("ADD 1:  :  : NUM:",nsboot.cfg.wks[l_id].tid,i,v.nbd); end;
 									nsboot.cmd.lun.add(nsboot.cfg.wks[l_id].tid,i,v.nbd)
 								end;
-								if tostring(v.enable) == "1" and v.type == "dyndata" and nsboot.cfg.wks[l_id].tid ~= nil and nsboot.inc.isFile(v.nbd) then
+								if tostring(v.enable) == "1" and v.type == "dynblock" and nsboot.cfg.wks[l_id].tid ~= nil and nsboot.inc.isFile(v.nbd) then
 									if tostring(nsboot.cfg.server.debug) == "1" then ngx.say("ADD 1:  :  : NUM:",nsboot.cfg.wks[l_id].tid,i,v.nbd); end;
 									nsboot.cmd.lun.add(nsboot.cfg.wks[l_id].tid,i,v.nbd)
 								end;
@@ -443,6 +499,29 @@
 		function nsboot:ImgCommit(id)
 				
 		end;
+		function nsboot:zfsmount(p_ip)
+			local l_id,zdest,zpoint = nsboot.inc.GetIDFromIPv4(p_ip)
+			if l_id ~= nil then 
+				zpoint = nsboot.cfg.zfs.mpoint.."/"..nsboot.cfg.wks[l_id].mac:gsub('%W','');
+				zdest = nsboot.cfg.zfs.dpoint..nsboot.cfg.wks[l_id].mac:gsub('%W','');
+			end;
+			if nsboot.cfg.wks[l_id] ~= nil  then nsboot:nbdFree(p_ip); nsboot.cmd.zfs.unmount(zpoint); nsboot.cmd.zfs.unsnap(zdest); lfs.rmdir(zpoint); while not nsboot.cmd.zfs.mtab(zdest) do  require("posix.unistd").sleep(1); nsboot.cmd.zfs.snap(zdest); lfs.mkdir(zpoint); nsboot.cmd.zfs.mount(zdest, zpoint); end;
+				for i,v in ipairs(nsboot.cfg.wks[l_id].img) do
+					if tostring(v.enable) == "1" and v.type == "dynblock" then
+						nsboot.cmd.zfs.unsnap(nsboot.cfg.zfs.snadev.."/"..v.path.."@"..nsboot.cfg.zfs.tmpname.."_"..nsboot.cfg.wks[l_id].mac:gsub('%W',''));
+						nsboot.cmd.zfs.snap(nsboot.cfg.zfs.snadev.."/"..v.path.."@"..nsboot.cfg.zfs.tmpname.."_"..nsboot.cfg.wks[l_id].mac:gsub('%W',''));
+						ngx.say("ZFS: "..nsboot.cfg.zfs.snadev.."/"..v.path.."@"..nsboot.cfg.zfs.tmpname.."_"..nsboot.cfg.wks[l_id].mac:gsub('%W',''))
+					end;
+				end;
+			end;				
+		end;	
+		function nsboot:zfsdemount(p_ip)
+			local l_id,zdest,zpoint = nsboot.inc.GetIDFromIPv4(p_ip)
+			if l_id ~= nil then zpoint = nsboot.cfg.zfs.mpoint.."/"..nsboot.cfg.wks[l_id].mac:gsub('%W',''); zdest = nsboot.cfg.zfs.dpoint..nsboot.cfg.wks[l_id].mac:gsub('%W',''); 						end;
+			if nsboot.cfg.wks[l_id].img ~= nil  then nsboot:nbdFree(p_ip); nsboot.cmd.zfs.unmount(zpoint); nsboot.cmd.zfs.unsnap(zdest); lfs.rmdir(zpoint); end;	
+
+
+		end;		
 	--[[===========================================================================================================================================================================================]]	
 	nsboot.inc.web = {}
 	nsboot.inc.web.pcListen = function() 
@@ -482,14 +561,20 @@
 						ngx.say(nsboot.cfg.web.pages.ipxe.body:gsub("([\n])", '\n'));
 						ngx.say(nsboot.cfg.web.pages.ipxe.footer:gsub("([\n])", '\n'));
 						if  tostring(nsboot.cfg.wks[l_id].supper) == "1"  then
-						else
 							local file
-								file = io.open("/tmp/ttt.ttt","w")
-								file:write(tostring(nsboot.cfg.wks[l_id].ipv4))
-								file:close()
 							nsboot.inc.monit();
 							nsboot:tgtstop(ngx.var.remote_addr);
 							nsboot:nbdFree(ngx.var.remote_addr);
+							nsboot:zfsmount(ngx.var.remote_addr);
+							nsboot:mkChild(ngx.var.remote_addr);
+							nsboot:nbdConnect(ngx.var.remote_addr);
+							nsboot:LunAdd(ngx.var.remote_addr);
+						else
+							local file
+							nsboot.inc.monit();
+							nsboot:tgtstop(ngx.var.remote_addr);
+							nsboot:nbdFree(ngx.var.remote_addr);
+							nsboot:zfsmount(ngx.var.remote_addr);
 							nsboot:mkChild(ngx.var.remote_addr);
 							nsboot:nbdConnect(ngx.var.remote_addr);
 							nsboot:LunAdd(ngx.var.remote_addr);
@@ -504,13 +589,14 @@
 			    elseif ngx.req.get_body_data() then
 			    		local file,temp,l_v,l_k
 			    			temp = json.decode(ngx.req.get_body_data():gsub('&','","'):gsub('^','{"post":{"'):gsub('=' ,'":"')..'"}}').post;
-			    			if nsboot.inc.isFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) then nsboot.cfg = nsboot:LoadFromFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) else nsboot.cfg = dofile("/home/kevin/srv/nsboot/modules/cfg.lua").cfg; nsboot:SaveToFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config,nsboot.cfg); end;
+			    			if nsboot.inc.isFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) then nsboot.cfg = nsboot:LoadFromFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) else nsboot.cfg = dofile("/srv/nsboot/cfg/cfg.lua").cfg; nsboot:SaveToFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config,nsboot.cfg); end;
 			    				if temp['id'] ~= nil and temp['supper'] == "true" and nsboot.inc.checkconf() and nsboot.cfg.wks[tonumber(temp['id'])] ~= nil then
 			    					nsboot.cfg =  nsboot:LoadFromFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config);
 			    					if temp['jsondata'] ~= nil then 
 			    						local u_i,u_k
 			    							for u_i,u_k in ipairs(json.decode(nsboot.inc.unescape(temp['jsondata']))) do
-			    								nsboot.cfg.wks[tonumber(temp['id'])].img[tonumber(u_k)].commit = "1"	
+			    								nsboot.cfg.wks[tonumber(temp['id'])].img[tonumber(u_k)].commit = "1"
+
 			    							end;
 			    						u_i,u_k = nil,nil
 			    					nsboot.cfg.wks[tonumber(temp['id'])].supper = "1"
@@ -565,9 +651,16 @@
 			    						ngx.say(json.encode(t_data));
 			    					t_data = nil
 			    				end
-			    			
+			   elseif ngx.var.arg_testzone == "true" then
+							-- nsboot.inc.monit();
+							-- nsboot:tgtstop("192.168.0.4");
+							-- nsboot:nbdFree("192.168.0.4");
+							nsboot:zfsmount("192.168.0.4");
+							nsboot:mkChild("192.168.0.4");
+							-- nsboot:nbdConnect("192.168.0.4");
+							-- nsboot:LunAdd("192.168.0.4");
 			   elseif ngx.var.arg_status == "true" then
-			   		if nsboot.inc.isFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) then nsboot.cfg = nsboot:LoadFromFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) else nsboot.cfg = dofile("/home/kevin/srv/nsboot/modules/cfg.lua").cfg; nsboot:SaveToFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config,nsboot.cfg); end;
+			   		if nsboot.inc.isFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) then nsboot.cfg = nsboot:LoadFromFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) else nsboot.cfg = dofile("/srv/nsboot/cfg/cfg.lua").cfg; nsboot:SaveToFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config,nsboot.cfg); end;
 					ngx.say(nsboot.cfg.web.pages.html.main);
 					nsboot.inc.web.pcListen();
 					ngx.say(os.date(),[[</table>
@@ -789,7 +882,7 @@
 					ngx.say("</body></html>");			    			
 			    			
 			    else
-							if nsboot.inc.isFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) then nsboot.cfg = nsboot:LoadFromFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) else nsboot.cfg = dofile("/home/kevin/srv/nsboot/modules/cfg.lua").cfg; nsboot:SaveToFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config,nsboot.cfg); end;
+							if nsboot.inc.isFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) then nsboot.cfg = nsboot:LoadFromFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) else nsboot.cfg = dofile("/srv/nsboot/cfg/cfg.lua").cfg; nsboot:SaveToFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config,nsboot.cfg); end;
 			   				ngx.say([[
 					<!DOCTYPE html>
 					<html>
@@ -1059,5 +1152,5 @@ document.getElementById("defaultOpen").click();
 		end;
 	--[[===========================================================================================================================================================================================]]
 
-		if nsboot.inc.isFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) then nsboot.cfg = nsboot:LoadFromFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) else nsboot.cfg = dofile("/home/kevin/srv/nsboot/modules/cfg.lua").cfg; nsboot:SaveToFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config,nsboot.cfg); end;
+		if nsboot.inc.isFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) then nsboot.cfg = nsboot:LoadFromFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config) else nsboot.cfg = dofile("/srv/nsboot/cfg/cfg.lua").cfg; nsboot:SaveToFile(nsboot.cfg.server.workdir.."/"..nsboot.cfg.server.distdir.."/cfg/"..nsboot.cfg.server.config,nsboot.cfg); end;
 		nsboot:GetPage()
