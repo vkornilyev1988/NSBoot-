@@ -23,10 +23,10 @@ nsboot.cfg.server.dns2					= "8.8.4.4"
 nsboot.cfg.server.workdir				= "/srv"
 nsboot.cfg.server.tftp					= "tftp"
 nsboot.cfg.server.distdir				= "nsboot"
-nsboot.cfg.server.imgdir				= "/srv/nsboot/images/boot"
-nsboot.cfg.server.imgdatadir			= "/srv/nsboot/images/games"
-nsboot.cfg.server.imgisodir				= "/srv/nsboot/images/iso"
-nsboot.cfg.server.imgbackdir			= "/srv/nsboot/writeback"
+nsboot.cfg.server.imgdir				= "/srv/images/boot"
+nsboot.cfg.server.imgdatadir			= "/images/games"
+nsboot.cfg.server.imgisodir				= "/srv/images/iso"
+nsboot.cfg.server.imgbackdir			= "/srv/writeback"
 nsboot.cfg.server.config				= "nsboot.json"
 nsboot.cfg.server.image_prefix			= "_child_"
 nsboot.cfg.server.debug					= 1
@@ -35,6 +35,33 @@ nsboot.cfg.server.nbd_nbds 				= 20
 nsboot.cfg.server.daemon				= nil
 nsboot.cfg.server.listen 				= 8888
 nsboot.cfg.server.shell_port			= 4200
+nsboot.cfg.server.lockfile 				= "/var/lock/nsboot_lock_"
+nsboot.cfg.server.ifaces 				= {}
+nsboot.cfg.server.ifaces[1]				= "eno1"
+
+--[[---------------------------------[USERS 										]]--
+nsboot.cfg.groups 						= {}
+nsboot.cfg.groups.wks 					= {}
+nsboot.cfg.groups.wks[1]				= "DEFAULT"
+nsboot.cfg.groups.wks[2] 				= "VIP"
+
+
+--[[=================================[ZFS  ]==========================================]]
+
+nsboot.cfg.zfs 							= {}
+nsboot.cfg.zfs.pool 					= {}
+nsboot.cfg.zfs.pool.name 				= "nsboot0"
+nsboot.cfg.zfs.pool.dir 				= "/srv"
+nsboot.cfg.zfs.dsetsrc 				 	= "images/boot"
+nsboot.cfg.zfs.datasetplan 				= {}
+nsboot.cfg.zfs.tmpname					= "snap"
+nsboot.cfg.zfs.devname 					= "images/storages"
+nsboot.cfg.zfs.dpoint 					= nsboot.cfg.zfs.pool.name.."/"..nsboot.cfg.zfs.dsetsrc.."@"..nsboot.cfg.zfs.tmpname.."_"
+nsboot.cfg.zfs.mpoint					= nsboot.cfg.server.imgdir.."/"..nsboot.cfg.zfs.tmpname
+nsboot.cfg.zfs.devpoint 				= "/dev/zvol/"..nsboot.cfg.zfs.pool.name.."/"..nsboot.cfg.zfs.devname
+nsboot.cfg.zfs.snadev					= nsboot.cfg.zfs.pool.name.."/"..nsboot.cfg.zfs.devname
+nsboot.cfg.zfs.pool.opt 				= {}
+
 
 
 --[[=================================[ISCSI]==========================================]]
@@ -54,6 +81,10 @@ nsboot.cfg.wks[1].ipv4					= "192.168.0.3"
 nsboot.cfg.wks[1].name  				= "PC003"
 nsboot.cfg.wks[1].enable 				= 1
 nsboot.cfg.wks[1].tid					= 1
+nsboot.cfg.wks[1].group 				= "DEFAULT"
+nsboot.cfg.wks[1].gateway				= "DEFAULT"
+nsboot.cfg.wks[1].dns 					= "DEFAULT"
+nsboot.cfg.wks[1].domainsearch			= "DEFAULT"
 nsboot.cfg.wks[1].supper				= 0
 nsboot.cfg.wks[1].fileboot 				= "ipxe"
 nsboot.cfg.wks[1].img 					= {}
@@ -63,21 +94,21 @@ nsboot.cfg.wks[1].img[1].boot 			= 1
 nsboot.cfg.wks[1].img[1].nbd			= "/dev/nbd1"
 nsboot.cfg.wks[1].img[1].cache 	 		= "unsafe"
 nsboot.cfg.wks[1].img[1].type 			= "dyndisk"
-nsboot.cfg.wks[1].img[1].commit 		= 1
+nsboot.cfg.wks[1].img[1].commit 		= 0
 nsboot.cfg.wks[1].img[1].enable 		= 1
 nsboot.cfg.wks[1].img[2] 				= {}
 nsboot.cfg.wks[1].img[2].path			= "lord.qcow2"
 nsboot.cfg.wks[1].img[2].boot 			= 0
 nsboot.cfg.wks[1].img[2].nbd			= "/dev/nbd2"
 nsboot.cfg.wks[1].img[2].cache 	 		= "unsafe"
-nsboot.cfg.wks[1].img[2].type 			= "dyndata"
-nsboot.cfg.wks[1].img[2].commit 		= 1
+nsboot.cfg.wks[1].img[2].type 			= "dynblock"
+nsboot.cfg.wks[1].img[2].commit 		= 0
 nsboot.cfg.wks[1].img[2].enable 		= 1
 nsboot.cfg.wks[1].img[3] 				= {}
-nsboot.cfg.wks[1].img[3].path			= "Win10_2004_Russian_x64.iso"  
+nsboot.cfg.wks[1].img[3].path			= ""  
 nsboot.cfg.wks[1].img[3].boot 			= 0
 nsboot.cfg.wks[1].img[3].nbd			= "/dev/nbd0"
-nsboot.cfg.wks[1].img[3].cache 	 		= "unsafe"
+nsboot.cfg.wks[1].img[3].cache 	 		= "none"
 nsboot.cfg.wks[1].img[3].type 			= "iso"
 nsboot.cfg.wks[1].img[3].enable 		= 0
 nsboot.cfg.wks[1].img[3].commit 		= 0
@@ -86,12 +117,18 @@ nsboot.cfg.wks[1].opt					= {}
 nsboot.cfg.wks[1].opt[1]				= "ipxe.keep-san 1"
 nsboot.cfg.wks[1].opt[2]				= "ipxe.no-pxedhcp 1"
 
+
+--"group":"DEFAULT","gateway":"DEFAULT","dns":"DEFAULT","domainsearch":"DEFAULT"
 ---------------------------------------------------------------------
 nsboot.cfg.wks[2].mac					= "b4:2e:99:2c:dd:df"	
 nsboot.cfg.wks[2].ipv4					= "192.168.0.4"
 nsboot.cfg.wks[2].name  				= "PC004"
 nsboot.cfg.wks[2].enable 				= 1
 nsboot.cfg.wks[2].tid					= 2
+nsboot.cfg.wks[2].group 				= "DEFAULT"
+nsboot.cfg.wks[2].gateway				= "DEFAULT"
+nsboot.cfg.wks[2].dns 					= "DEFAULT"
+nsboot.cfg.wks[2].domainsearch			= "DEFAULT"
 nsboot.cfg.wks[2].supper				= 0
 nsboot.cfg.wks[2].fileboot 				= "ipxe"
 nsboot.cfg.wks[2].img 					= {}
@@ -108,21 +145,62 @@ nsboot.cfg.wks[2].img[2].path			= "lord.qcow2"
 nsboot.cfg.wks[2].img[2].boot 			= 0
 nsboot.cfg.wks[2].img[2].nbd			= "/dev/nbd4"
 nsboot.cfg.wks[2].img[2].cache 	 		= "unsafe"
-nsboot.cfg.wks[2].img[2].type 			= "dyndata"
+nsboot.cfg.wks[2].img[2].type 			= "dynblock"
 nsboot.cfg.wks[2].img[2].enable 		= 1
 nsboot.cfg.wks[2].img[2].commit 		= 0
 nsboot.cfg.wks[2].img[3] 				= {}
-nsboot.cfg.wks[2].img[3].path			= ""
+nsboot.cfg.wks[2].img[3].path			= "Win10_2004_Russian_x64.iso"
 nsboot.cfg.wks[2].img[3].boot 			= 0
 nsboot.cfg.wks[2].img[3].nbd			= "/dev/nbd0"
 nsboot.cfg.wks[2].img[3].cache 	 		= "unsafe"
 nsboot.cfg.wks[2].img[3].type 			= "iso"
-nsboot.cfg.wks[2].img[3].enable 		= 0
+nsboot.cfg.wks[2].img[3].enable 		= 1
 nsboot.cfg.wks[2].img[3].commit 		= 0
 nsboot.cfg.wks[2].swp					= 0
 nsboot.cfg.wks[2].opt					= {}
 nsboot.cfg.wks[2].opt[1]				= "ipxe.keep-san 1"
 nsboot.cfg.wks[2].opt[2]				= "ipxe.no-pxedhcp 1"
+
+nsboot.cfg.wks[3].mac					= "b4:2e:99:2c:de:5c"	
+nsboot.cfg.wks[3].ipv4					= "192.168.0.5"
+nsboot.cfg.wks[3].name  				= "PC005"
+nsboot.cfg.wks[3].enable 				= 1
+nsboot.cfg.wks[3].tid					= 2
+nsboot.cfg.wks[3].group 				= "DEFAULT"
+nsboot.cfg.wks[3].gateway				= "DEFAULT"
+nsboot.cfg.wks[3].dns 					= "DEFAULT"
+nsboot.cfg.wks[3].domainsearch			= "DEFAULT"
+nsboot.cfg.wks[3].supper				= 0
+nsboot.cfg.wks[3].fileboot 				= "ipxe"
+nsboot.cfg.wks[3].img 					= {}
+nsboot.cfg.wks[3].img[1] 				= {}
+nsboot.cfg.wks[3].img[1].path			= "win10cc.qcow2"
+nsboot.cfg.wks[3].img[1].boot 			= 1
+nsboot.cfg.wks[3].img[1].nbd			= "/dev/nbd5"
+nsboot.cfg.wks[3].img[1].cache 	 		= "unsafe"
+nsboot.cfg.wks[3].img[1].type 			= "dyndisk"
+nsboot.cfg.wks[3].img[1].enable 		= 1
+nsboot.cfg.wks[3].img[1].commit 		= 0
+nsboot.cfg.wks[3].img[2] 				= {}
+nsboot.cfg.wks[3].img[2].path			= "lord.qcow2"
+nsboot.cfg.wks[3].img[2].boot 			= 0
+nsboot.cfg.wks[3].img[2].nbd			= "/dev/nbd6"
+nsboot.cfg.wks[3].img[2].cache 	 		= "unsafe"
+nsboot.cfg.wks[3].img[2].type 			= "dynblock"
+nsboot.cfg.wks[3].img[2].enable 		= 1
+nsboot.cfg.wks[3].img[2].commit 		= 0
+nsboot.cfg.wks[3].img[3] 				= {}
+nsboot.cfg.wks[3].img[3].path			= "Win10_2004_Russian_x64.iso"
+nsboot.cfg.wks[3].img[3].boot 			= 0
+nsboot.cfg.wks[3].img[3].nbd			= "/dev/nbd0"
+nsboot.cfg.wks[3].img[3].cache 	 		= "unsafe"
+nsboot.cfg.wks[3].img[3].type 			= "iso"
+nsboot.cfg.wks[3].img[3].enable 		= 1
+nsboot.cfg.wks[3].img[3].commit 		= 0
+nsboot.cfg.wks[3].swp					= 0
+nsboot.cfg.wks[3].opt					= {}
+nsboot.cfg.wks[3].opt[1]				= "ipxe.keep-san 1"
+nsboot.cfg.wks[3].opt[2]				= "ipxe.no-pxedhcp 1"
 
 --[[=================================[DHCP]===========================================]]
 
