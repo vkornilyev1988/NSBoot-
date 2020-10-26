@@ -15,4 +15,5 @@ Diskless boot Windows/Linux - Free Analog CCBoot
 
 
 This project is intended to be a free replacement for technology ccboot.
-
+===
+apt install etherwake shellinabox qemu-utils lua-json lua-socket lua-posix nginx-extras
