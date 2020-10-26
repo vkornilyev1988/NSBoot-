@@ -34,3 +34,4 @@ This project is intended to be a free replacement for technology ccboot.
 - [ ] Autoremove child images if disconnect iscsi more keep-alive connect
 - [ ] GUI Installer system
 - [ ] ShellInaboxd
+- [ ] Windows agent nsboot
