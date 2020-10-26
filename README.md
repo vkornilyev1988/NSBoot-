@@ -19,6 +19,19 @@ This project is intended to be a free replacement for technology ccboot.
 - Ubuntu : 
  apt install -y etherwake shellinabox qemu-utils lua-json lua-socket lua-posix nginx-extras zfsutils-linux
  
+#> sudo zpool create -m /srv nsboot0 <disk> <disk> cache <disk>
+#> sudo  zfs create    -o mountpoint=/srv/images nsboot0/images                   
+#> sudo  zfs create    -o mountpoint=/srv/images/boot nsboot0/images/boot              
+#> sudo  zfs create    -o mountpoint=/srv/images/boot/snap nsboot0/images/boot/snap          
+#> sudo  zfs create    -o mountpoint=/srv/images/games nsboot0/images/games                
+#> sudo  zfs create    -o mountpoint=/srv/images/snap nsboot0/images/snap                
+#> sudo  zfs create    -o mountpoint=/srv/images/storages nsboot0/images/storages
+#> sudo  zfs create    nsboot0/writeback         
+
+if created zvol, example:
+#> sudo  zfs create -V60G -o snapdev=visible nsboot0/images/storages/lord.qcow2
+ 
+ 
 
 
 ========================================
