@@ -19,7 +19,7 @@ This project is intended to be a free replacement for technology ccboot.
 - Ubuntu : 
  apt install -y etherwake shellinabox qemu-utils lua-json lua-socket lua-posix nginx-extras zfsutils-linux
  
-#> sudo zpool create -m /srv nsboot0 <disk> <disk> cache <disk>
+#> sudo zpool create -m /srv nsboot0 < disk > < disk > cache < disk >
   
 #> sudo  zfs create    -o mountpoint=/srv/images nsboot0/images                   
 #> sudo  zfs create    -o mountpoint=/srv/images/boot nsboot0/images/boot              
