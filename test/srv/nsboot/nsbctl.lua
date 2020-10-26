@@ -11,7 +11,7 @@
 --lsof -i :68 																					#Например, отобразить сервисы, прослушивающие порт 22 и/или уже установленные соединения на этом порту:
 --tostring
 --[[             INSTALL COMPONENTS                ]]
--- apt install etherwake shellinabox qemu-utils
+-- apt install etherwake shellinabox qemu-utils lua-json lua-socket lua-posix nginx-extras
 --[[   
 
 				_____________________________________________________________________
