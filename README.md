@@ -16,4 +16,21 @@ Diskless boot Windows/Linux - Free Analog CCBoot
 
 This project is intended to be a free replacement for technology ccboot.
 ===
-apt install etherwake shellinabox qemu-utils lua-json lua-socket lua-posix nginx-extras
+- Ubuntu : 
+ apt install -y etherwake shellinabox qemu-utils lua-json lua-socket lua-posix nginx-extras zfsutils-linux
+ 
+
+
+========================================
+
+ TODO:
+- [x] Base resty generic [LUA 5.3] 
+- [x] nbd devices process detach from nginx [/usr/bin/nsbootd]
+- [x] init stripc start/stop/status/reload [/etc/init.d/nsbootd]
+- [ ] Web interface
+- [ ] Installer system
+- [x] vhd/qcow/qcow2/vmdk/vhdx parrent images
+- [x] AutoRemove child images on boot system if not super mode
+- [ ] Autoremove child images if disconnect iscsi more keep-alive connect
+- [ ] GUI Installer system
+- [ ] ShellInaboxd
